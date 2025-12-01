@@ -194,42 +194,20 @@ def user_view(username):
     # ===== CSS + JS CHẶN COPY / SAVE / PRINT =====
     st.markdown("""
     <style>
-        /* Chặn chọn text */
-        body, html, iframe, embed {
+        body, html {
             -webkit-user-select: none !important;
             -moz-user-select: none !important;
             -ms-user-select: none !important;
             user-select: none !important;
         }
-
-        /* Chặn chuột phải toàn trang */
-        body {
-            -webkit-touch-callout: none;
-        }
-
-        /* Ẩn toolbar PDF (nếu trình xem PDF hỗ trợ) */
-        embed::-webkit-media-controls-panel,
-        embed::-webkit-media-controls-download-button {
-            display: none !important;
-        }
-
-        /* Khóa giao diện PDF */
-        embed {
-            pointer-events: none !important;
-        }
     </style>
 
     <script>
-        // Chặn chuột phải
         document.addEventListener('contextmenu', event => event.preventDefault());
-
-        // Chặn Ctrl + S / Ctrl + P / Ctrl + Shift + P (print dialog)
         document.addEventListener('keydown', function(e) {
-            if (
-                (e.ctrlKey && e.key === 's') || 
-                (e.ctrlKey && e.key === 'p') ||
-                (e.ctrlKey && e.shiftKey && e.key === 'P')
-            ) {
+            if ((e.ctrlKey && e.key === 's') || 
+                (e.ctrlKey && e.key === 'p') || 
+                (e.ctrlKey && e.shiftKey && e.key === 'P')) {
                 e.preventDefault();
                 e.stopPropagation();
                 return false;
@@ -241,21 +219,16 @@ def user_view(username):
     # ===== DUYỆT THƯ MỤC =====
     for folder in os.listdir(DATA_DIR):
         folder_path = os.path.join(DATA_DIR, folder)
+        if not os.path.isdir(folder_path):
+            continue
+
         files = os.listdir(folder_path)
 
         # kiểm tra user có quyền xem folder
-        can_see_folder = False
-        for f in files:
-            file_id = f"{folder}/{f}"
-            allowed = file_permissions.get(file_id)
-
-            if not allowed:
-                allowed = folders.get(folder, [])
-
-            if username in allowed:
-                can_see_folder = True
-                break
-
+        can_see_folder = any(
+            username in (file_permissions.get(f"{folder}/{f}") or folders.get(folder, []))
+            for f in files
+        )
         if not can_see_folder:
             continue
 
@@ -264,34 +237,28 @@ def user_view(username):
         # ===== HIỂN THỊ FILE =====
         for f in files:
             file_id = f"{folder}/{f}"
-            allowed = file_permissions.get(file_id)
-
-            if not allowed:
-                allowed = folders.get(folder, [])
-
+            allowed = file_permissions.get(file_id) or folders.get(folder, [])
             if username not in allowed:
                 continue
 
             st.write(f"📄 {f}")
 
             if st.button(f"Xem {f}", key=file_id):
-                # Đọc file
+                # đọc file
                 enc = open(os.path.join(DATA_DIR, folder, f), "rb").read()
                 raw = decrypt_file(enc)
-                pdf64 = base64.b64encode(raw).decode("utf8")
+                pdf64 = base64.b64encode(raw).decode("utf-8")
 
-                # ===== CHẾ ĐỘ CHỈ XEM (safe với Edge) =====
-                st.markdown(f"""
-                    <embed 
-                        src="data:application/pdf;base64,{pdf64}" 
-                        type="application/pdf"
-                        width="100%" 
-                        height="700px"
-                        style="border:none;"
-                    />
-                """,
-                unsafe_allow_html=True)
-
+                # iframe xem PDF
+                pdf_display = f"""
+                <iframe
+                    src="data:application/pdf;base64,{pdf64}"
+                    width="100%"
+                    height="700px"
+                    style="border:none;"
+                ></iframe>
+                """
+                st.markdown(pdf_display, unsafe_allow_html=True)
                 log_access(username, f, "file")
 
 
