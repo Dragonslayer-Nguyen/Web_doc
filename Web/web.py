@@ -191,31 +191,6 @@ def admin_panel():
 def user_view(username):
     st.title("📚 Tài liệu được phép xem")
 
-    # ===== CSS + JS CHẶN COPY / SAVE / PRINT =====
-    st.markdown("""
-    <style>
-        body, html {
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-            user-select: none !important;
-        }
-    </style>
-
-    <script>
-        document.addEventListener('contextmenu', event => event.preventDefault());
-        document.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey && e.key === 's') || 
-                (e.ctrlKey && e.key === 'p') || 
-                (e.ctrlKey && e.shiftKey && e.key === 'P')) {
-                e.preventDefault();
-                e.stopPropagation();
-                return false;
-            }
-        });
-    </script>
-    """, unsafe_allow_html=True)
-
     # ===== DUYỆT THƯ MỤC =====
     for folder in os.listdir(DATA_DIR):
         folder_path = os.path.join(DATA_DIR, folder)
@@ -249,16 +224,54 @@ def user_view(username):
                 raw = decrypt_file(enc)
                 pdf64 = base64.b64encode(raw).decode("utf-8")
 
-                # iframe xem PDF
-                pdf_display = f"""
-                <iframe
-                    src="data:application/pdf;base64,{pdf64}"
-                    width="100%"
-                    height="700px"
-                    style="border:none;"
-                ></iframe>
+                # ===== PDF.js viewer (chỉ xem) =====
+                pdf_viewer = f"""
+                <div id="pdf-viewer" style="width:100%; height:700px; border:1px solid #ccc;"></div>
+
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.min.js"></script>
+                <script>
+                const pdfData = atob("{pdf64}");
+
+                const pdfjsLib = window['pdfjs-dist/build/pdf'];
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.9.179/pdf.worker.min.js';
+
+                const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
+                loadingTask.promise.then(function(pdf) {{
+                    const viewer = document.getElementById('pdf-viewer');
+                    viewer.innerHTML = '';
+                    for(let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
+                        pdf.getPage(pageNum).then(function(page) {{
+                            const scale = 1.2;
+                            const viewport = page.getViewport({{scale: scale}});
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d');
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            viewer.appendChild(canvas);
+
+                            const renderContext = {{
+                                canvasContext: context,
+                                viewport: viewport
+                            }};
+                            page.render(renderContext);
+                        }});
+                    }}
+                }}, function (reason) {{
+                    console.error(reason);
+                }});
+                </script>
+
+                <style>
+                    /* Chặn select, copy */
+                    #pdf-viewer {{
+                        user-select: none;
+                        -webkit-user-select: none;
+                        -moz-user-select: none;
+                        -ms-user-select: none;
+                    }}
+                </style>
                 """
-                st.markdown(pdf_display, unsafe_allow_html=True)
+                st.components.v1.html(pdf_viewer, height=720, scrolling=True)
                 log_access(username, f, "file")
 
 
